@@ -44,7 +44,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn migrate_create_table() {
         let mut conn = Connection::new_memory().unwrap();
         conn.register::<TestModel>().unwrap();
@@ -55,7 +54,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn crud() {
         let mut conn = Connection::new_memory().unwrap();
         conn.register::<TestModel>().unwrap();
@@ -164,7 +162,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn migrate_basic() {
         // Check if basic migration works (Add column, Remove column)
 
