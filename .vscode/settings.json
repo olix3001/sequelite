@@ -1,0 +1,3 @@
+{
+    "rust-analyzer.linkedProjects": [".\\sequel-test\\Cargo.toml"]
+}
