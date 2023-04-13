@@ -11,7 +11,7 @@ pub struct Connection {
 impl Connection {
     pub fn new(path: &str) -> Result<Self, rusqlite::Error> {
         let connection = rusqlite::Connection::open(path)?;
-        env_logger::init();
+        let _ = env_logger::try_init();
         Ok(Connection {
             connection,
             latest_schema: DbSchema::new()
@@ -20,7 +20,7 @@ impl Connection {
 
     pub fn new_memory() -> Result<Self, rusqlite::Error> {
         let connection = rusqlite::Connection::open_in_memory()?;
-        env_logger::init();
+        let _ = env_logger::try_init();
         Ok(Connection {
             connection,
             latest_schema: DbSchema::new()

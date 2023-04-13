@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
-use crate::connection::{RawQuery, Queryable, Executable};
+use crate::{connection::{RawQuery, Queryable, Executable}, IntoSqlite};
 
-use super::{Model, query::ModelQueryFilter};
+use super::{Model, query::{ModelQueryFilter, ColumnQueryOrder}};
 
 pub struct ModelDeleteQuery<M: Model> {
     query: RawQuery,
@@ -34,12 +34,22 @@ impl<M: Model> ModelDeleteQuery<M> {
     }
 
     // Limit and offset
+    /// Limit the number of rows returned by the query.
+    /// WARNING: This requires SQLITE_ENABLE_UPDATE_DELETE_LIMIT to be enabled in the sqlite3 library.
     pub fn limit(self, limit: u32) -> Self {
         self.combine(RawQuery::new("LIMIT ?".to_string(), vec![Box::new(limit)]))
     }
 
+    /// Offset the number of rows returned by the query.
     pub fn offset(self, offset: u32) -> Self {
         self.combine(RawQuery::new("OFFSET ?".to_string(), vec![Box::new(offset)]))
+    }
+
+    // Order
+    /// Order the rows returned by the query.
+    /// WARNING: This requires SQLITE_ENABLE_UPDATE_DELETE_LIMIT to be enabled in the sqlite3 library.
+    pub fn order_by(self, order: ColumnQueryOrder) -> Self {
+        self.combine(RawQuery::new(format!("ORDER BY {}", order.into_sqlite()), Vec::new()))
     }
 }
 

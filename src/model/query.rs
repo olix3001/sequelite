@@ -2,7 +2,7 @@ use std::{marker::PhantomData, fmt::Debug, ops::{BitAnd, BitOr}};
 
 use rusqlite::ToSql;
 
-use crate::connection::{Queryable, RawQuery, IntoInsertable, Insertable, Executable};
+use crate::{connection::{Queryable, RawQuery, IntoInsertable, Insertable, Executable}, IntoSqlite};
 
 use super::{Model, column::Column};
 
@@ -71,6 +71,22 @@ impl<M> ModelQuery<M> {
     pub fn offset(self, offset: u32) -> Self {
         ModelQuery::combine(self, "OFFSET ?".to_string(), vec![Box::new(offset)])
     }
+
+    pub fn order_by(self, order: ColumnQueryOrder) -> Self {
+        ModelQuery::combine(self, format!("ORDER BY {}", order.into_sqlite()), Vec::new())
+    }
+
+    /// Select only the given columns (do not use this if you want to map to a model column which is not an Option<T>)
+    pub fn columns(self, columns: &[Column<'static>]) -> Self {
+        let columns = columns.iter().map(|c| c.name()).collect::<Vec<_>>().join(", ");
+        // Replace first SELECT * with the given columns
+        let query = self.query.replacen("*", &columns, 1);
+        ModelQuery {
+            model: PhantomData,
+            query,
+            params: self.params,
+        }
+    }
 }
 
 impl<M: Model> Queryable<Vec<M>> for ModelQuery<M> {
@@ -107,6 +123,16 @@ impl Executable<usize> for ModelQuery<CountQuery> {
 
 pub trait ModelQueryFilter {
     fn get_query(&mut self) -> crate::connection::RawQuery;
+}
+
+pub struct InQueryFilter {
+    sql: RawQuery,
+}
+
+impl ModelQueryFilter for InQueryFilter {
+    fn get_query(&mut self) -> RawQuery {
+        self.sql.move_clone()
+    }
 }
 
 pub struct ColumnQueryFilter {
@@ -153,6 +179,31 @@ macro_rules! impl_column_filter {
     };
 }
 
+pub struct ColumnQueryOrder {
+    column: String,
+    order: ColumnQueryOrdering,
+}
+
+impl IntoSqlite for ColumnQueryOrder {
+    fn into_sqlite(&self) -> String {
+        format!("{} {}", self.column, self.order.into_sqlite())
+    }
+}
+
+pub enum ColumnQueryOrdering {
+    Ascending,
+    Descending,
+}
+
+impl IntoSqlite for ColumnQueryOrdering {
+    fn into_sqlite(&self) -> String {
+        match self {
+            ColumnQueryOrdering::Ascending => "ASC".to_string(),
+            ColumnQueryOrdering::Descending => "DESC".to_string(),
+        }
+    }
+}
+
 pub trait ColumnQueryFilterImpl {
     trait_column_filter!(eq);
     trait_column_filter!(ne);
@@ -167,8 +218,11 @@ pub trait ColumnQueryFilterImpl {
     fn is_null(self) -> ColumnQueryFilterUnary;
     fn is_not_null(self) -> ColumnQueryFilterUnary;
 
-    fn in_(self, values: Vec<impl ToSql>) -> ColumnQueryFilter;
-    fn not_in(self, values: Vec<impl ToSql>) -> ColumnQueryFilter;
+    fn in_(self, values: impl ColumnInQuery) -> InQueryFilter;
+    fn not_in(self, values: impl ColumnInQuery) -> InQueryFilter;
+
+    fn ascending(self) -> ColumnQueryOrder;
+    fn descending(self) -> ColumnQueryOrder;
 }
 
 impl ColumnQueryFilterImpl for Column<'_> {
@@ -199,44 +253,107 @@ impl ColumnQueryFilterImpl for Column<'_> {
     }
 
     /// Check if the column is in the list of values
-    fn in_(self, values: Vec<impl ToSql>) -> ColumnQueryFilter {
-        let mut params = Vec::new();
-        let mut sql = format!("{} IN (", self.name());
-        for value in values {
-            sql.push_str("?, ");
-            params.push(Box::new(value));
-        }
-        sql.pop();
-        sql.pop();
-        sql.push(')');
+    fn in_(self, values: impl ColumnInQuery) -> InQueryFilter {
+        let q = values.to_query();
+        let sql = format!("{} IN {}", self.name(), q.sql);
 
-        ColumnQueryFilter {
-            column: self.name(),
-            op: "",
-            value: None,
-        }
+        InQueryFilter { sql: RawQuery::new(sql, q.params) }
     }
 
     /// Check if the column is not in the list of values
-    fn not_in(self, values: Vec<impl ToSql>) -> ColumnQueryFilter {
-        let mut params = Vec::new();
-        let mut sql = format!("{} NOT IN (", self.name());
-        for value in values {
-            sql.push_str("?, ");
-            params.push(Box::new(value));
-        }
-        sql.pop();
-        sql.pop();
-        sql.push(')');
+    fn not_in(self, values: impl ColumnInQuery) -> InQueryFilter {
+        let q = values.to_query();
+        let sql = format!("{} NOT IN {}", self.name(), q.sql);
 
-        ColumnQueryFilter {
+        InQueryFilter { sql: RawQuery::new(sql, q.params) }
+    }
+
+    fn ascending(self) -> ColumnQueryOrder {
+        ColumnQueryOrder {
             column: self.name(),
-            op: "",
-            value: None,
+            order: ColumnQueryOrdering::Ascending,
+        }
+    }
+
+    fn descending(self) -> ColumnQueryOrder {
+        ColumnQueryOrder {
+            column: self.name(),
+            order: ColumnQueryOrdering::Descending,
         }
     }
 }
 
+pub trait ColumnInQuery {
+    fn to_query(self) -> RawQuery;
+}
+
+impl<M: Model> ColumnInQuery for ModelQuery<M> {
+    fn to_query(mut self) -> RawQuery {
+        let mut query = self.get_query();
+        let sql = format!("({})", query.sql);
+        query.sql = sql;
+        query
+    }
+}
+
+impl<T: ToSql + 'static> ColumnInQuery for Vec<T> {
+    fn to_query(self) -> RawQuery {
+        let mut params = Vec::new();
+        let mut sql = String::from("(");
+
+        for (i, v) in self.into_iter().enumerate() {
+            if i > 0 {
+                sql.push_str(", ");
+            }
+
+            sql.push('?');
+            params.push(Box::new(v) as Box<dyn ToSql + 'static>);
+        }
+
+        sql.push(')');
+
+        RawQuery::new(sql, params)
+    }
+}
+
+impl<T: ToSql + 'static> ColumnInQuery for &'static [T] {
+    fn to_query(self) -> RawQuery {
+        let mut params = Vec::new();
+        let mut sql = String::from("(");
+
+        for (i, v) in self.iter().enumerate() {
+            if i > 0 {
+                sql.push_str(", ");
+            }
+
+            sql.push('?');
+            params.push(Box::new(v) as Box<dyn ToSql + 'static>);
+        }
+
+        sql.push(')');
+
+        RawQuery::new(sql, params)
+    }
+}
+impl<T: ToSql + 'static, const N: usize> ColumnInQuery for &'static [T; N] {
+    fn to_query(self) -> RawQuery {
+        let mut params = Vec::new();
+        let mut sql = String::from("(");
+
+        for (i, v) in self.iter().enumerate() {
+            if i > 0 {
+                sql.push_str(", ");
+            }
+
+            sql.push('?');
+            params.push(Box::new(v) as Box<dyn ToSql + 'static>);
+        }
+
+        sql.push(')');
+
+        RawQuery::new(sql, params)
+    }
+}
 
 pub trait ModelQueryFilterExt: ModelQueryFilter {
     fn and<F: ModelQueryFilter>(self, filter: F) -> ModelQueryFilterAnd<Self, F>
