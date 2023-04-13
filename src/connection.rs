@@ -105,7 +105,6 @@ impl Connection {
             }
 
             let ty = SqliteType::from_str(&ty);
-            // TODO: get default value
             let column = Column::new(name, ty.unwrap(), flags, None);
             columns.push(column);
         }

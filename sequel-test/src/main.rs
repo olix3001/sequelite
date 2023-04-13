@@ -5,6 +5,7 @@ use sequelite::chrono;
 struct User {
     id: Option<i32>,
     name: String,
+    nickname: Option<String>,
 
     #[default_value(&NowTime)]
     created_at: Option<chrono::NaiveDateTime>,
@@ -23,7 +24,9 @@ fn main() {
         User {
             id: None,
             name: format!("User {}", i),
+            nickname: if i % 2 == 0 { Some(format!("Cool nickname {}", i)) } else { None },
             created_at: None,
+            ..Default::default()
         }.insert(&conn).unwrap();
     }
 
@@ -33,11 +36,12 @@ fn main() {
         .set(User::name, "John Doe")
         .exec(&conn).unwrap();
 
-    // Delete all users with id < 2 or id > 8
+    // Delete all users without a nickname
     User::delete()
-        .filter(User::id.lt(2) | User::id.gt(8))
+        .filter(User::nickname.is_null())
         .exec(&conn).unwrap();
 
-    // Print all users
-    println!("{:?}", User::select().exec(&conn).unwrap());
+    // Select all users
+    let users = User::select().exec(&conn).unwrap();
+    users.iter().for_each(|user| println!("{:?}", user));
 }

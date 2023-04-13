@@ -182,6 +182,7 @@ impl ColumnQueryFilterImpl for Column<'_> {
     impl_column_filter!(like, "LIKE");
     impl_column_filter!(not_like, "NOT LIKE");
 
+    /// Check if the column is null (only for nullable columns)
     fn is_null(self) -> ColumnQueryFilterUnary {
         ColumnQueryFilterUnary {
             column: self.name(),
@@ -189,6 +190,7 @@ impl ColumnQueryFilterImpl for Column<'_> {
         }
     }
 
+    /// Check if the column is not null (only for nullable columns)
     fn is_not_null(self) -> ColumnQueryFilterUnary {
         ColumnQueryFilterUnary {
             column: self.name(),
@@ -196,6 +198,7 @@ impl ColumnQueryFilterImpl for Column<'_> {
         }
     }
 
+    /// Check if the column is in the list of values
     fn in_(self, values: Vec<impl ToSql>) -> ColumnQueryFilter {
         let mut params = Vec::new();
         let mut sql = format!("{} IN (", self.name());
@@ -214,6 +217,7 @@ impl ColumnQueryFilterImpl for Column<'_> {
         }
     }
 
+    /// Check if the column is not in the list of values
     fn not_in(self, values: Vec<impl ToSql>) -> ColumnQueryFilter {
         let mut params = Vec::new();
         let mut sql = format!("{} NOT IN (", self.name());

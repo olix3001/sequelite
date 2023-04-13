@@ -85,6 +85,9 @@ impl SqliteType {
         match s.to_uppercase().as_str() {
             "INTEGER" => Some(SqliteType::Integer),
             "TEXT" => Some(SqliteType::Text),
+            "REAL" => Some(SqliteType::Real),
+            "BLOB" => Some(SqliteType::Blob),
+            "DATETIME" => Some(SqliteType::DateTime),
             _ => None
         }
     }
