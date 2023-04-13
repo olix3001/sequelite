@@ -1,5 +1,6 @@
 use crate::connection::Connection;
 
+use self::delete_query::ModelDeleteQuery;
 use self::query::CountQuery;
 use self::update_query::ModelUpdateQuery;
 
@@ -7,6 +8,7 @@ mod column;
 pub mod migrator;
 pub mod query;
 pub mod update_query;
+pub mod delete_query;
 
 pub use rusqlite::Rows as SqliteRows;
 pub use rusqlite::ToSql as SqliteToSql;
@@ -51,6 +53,10 @@ pub trait ModelExt<M: Model> {
     where
         Self: Sized;
 
+    fn delete() -> ModelDeleteQuery<M>
+    where
+        Self: Sized;
+
 }
 
 impl<M: Model> ModelExt<M> for M {
@@ -79,5 +85,12 @@ impl<M: Model> ModelExt<M> for M {
         Self: Sized,
     {
         ModelUpdateQuery::new()
+    }
+
+    fn delete() -> ModelDeleteQuery<M>
+    where
+        Self: Sized,
+    {
+        ModelDeleteQuery::new()
     }
 }

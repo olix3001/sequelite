@@ -36,9 +36,9 @@ impl Migrator {
                         if column.ty != latest_column.ty {
                             // The column type is not the same, use alter table to change it.
                             // safety note: this is safe because the column name is checked against the latest schema.
-                            unimplemented!("Changing column type is not implemented yet.");
+                            replace_table_full(connection, table, latest_schema.tables.get(&table.clone()).unwrap());
 
-                            warn!(target: "migration", "Changed column {} in table {}.", column.name(), table);
+                            warn!(target: "migration", "Changed column {} in table {} from '{}' to '{}'.", column.name(), table, column.ty.into_sqlite(), latest_column.ty.into_sqlite());
                         }
                     } else {
                         // The column is not in the latest schema, add it without modifying the data.
@@ -89,6 +89,31 @@ impl Migrator {
             }
         }
     }
+}
+
+fn replace_table_full(connection: &Connection, table: &str, columns: &[Column]) {
+    let mut sql = format!("CREATE TABLE temp_{}_new (", table);
+    for column in columns.iter() {
+        sql.push_str(&format!("{},", column.into_sqlite()));
+    }
+    sql.pop();
+    sql.push(')');
+    connection.execute_no_params(&sql).unwrap();
+
+    // Copy the data from the old table to the new table.
+    connection.execute_no_params(&format!(
+        "INSERT INTO temp_{}_new SELECT * FROM {};",
+        table, table
+    )).unwrap();
+
+    // Drop the old table.
+    connection.execute_no_params(&format!("DROP TABLE IF EXISTS {}", table)).unwrap();
+
+    // Rename the new table to the old table.
+    connection.execute_no_params(&format!(
+        "ALTER TABLE temp_{}_new RENAME TO {};",
+        table, table
+    )).unwrap();
 }
 
 pub struct DbSchema<'a> {

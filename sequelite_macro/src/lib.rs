@@ -80,7 +80,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
         let getter = if field_option {
             quote!(
                 if column.name_const() == Self::#field_name.name_const() {
-                    return self.#field_name.map(|v| Box::new(v.clone()) as Box<dyn sequelite::model::SqliteToSql>)
+                    return self.#field_name.as_ref().map(|v| Box::new(v.clone()) as Box<dyn sequelite::model::SqliteToSql>)
                 }
             )
         } else {

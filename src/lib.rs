@@ -8,9 +8,14 @@ pub mod prelude {
     };
 
     pub use crate::connection::Connection;
+    pub use crate::connection::Executable;
 
     pub use sequelite_macro::Model;
+
+    pub use rusqlite::Error as SqliteError;
 }
+
+extern crate rusqlite;
 
 pub trait IntoSqlite {
     fn into_sqlite(&self) -> String;

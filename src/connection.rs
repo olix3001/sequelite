@@ -45,6 +45,7 @@ impl Connection {
     }
 
     pub(crate) fn execute_no_params(&self, sql: &str) -> Result<(), rusqlite::Error> {
+        debug!(target: "query_internal", "Executing query: \"{}\"", sql);
         self.connection.execute(sql, [])?;
         Ok(())
     }

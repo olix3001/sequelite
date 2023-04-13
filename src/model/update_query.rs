@@ -89,7 +89,7 @@ impl<M: Model> Queryable<()> for ModelUpdateQuery<M> {
     }
 
     fn parse_result(&mut self, _rows: rusqlite::Rows) -> () {
-        ()
+        // Nothing to parse
     }
 
     fn should_execute(&self) -> bool {
