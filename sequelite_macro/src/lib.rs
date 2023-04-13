@@ -118,10 +118,22 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                         "f32" => quote!(sequelite::sql_types::SqliteType::Real),
                         "f64" => quote!(sequelite::sql_types::SqliteType::Real),
                         "bool" => quote!(sequelite::sql_types::SqliteType::Integer),
+                        "Vec<u8>" => quote!(sequelite::sql_types::SqliteType::Blob),
                         _ => panic!("Unsupported type"),
                     }
                 } else {
-                    panic!("Only one type is supported");
+                    if segments.len() == 2 {
+                        // Expect that 3rd segment is NaiveDateTime
+                        let segment = &segments[1];
+                        let ident = &segment.ident;
+                        if ident.to_string() == "NaiveDateTime" {
+                            quote!(sequelite::sql_types::SqliteType::DateTime)
+                        } else {
+                            panic!("Type not supported");
+                        }
+                    } else {
+                        panic!("Type not supported");
+                    }
                 }
             }
             _ => panic!("Only types are supported"),

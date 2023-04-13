@@ -13,7 +13,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rusqlite = { version = "0.28", features = ["bundled"] }
+rusqlite = { version = "0.28", features = ["bundled", "chrono"] }
 env_logger = "0.9"
 log = "0.4"
 sequelite_macro = { path = "./sequelite_macro" }
+chrono = "0.4"

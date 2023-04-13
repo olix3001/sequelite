@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use log::warn;
+use log::{warn, debug};
 
 use crate::{connection::Connection, IntoSqlite};
 
@@ -84,6 +84,8 @@ impl Migrator {
                 sql.pop();
                 sql.push(')');
                 connection.execute_no_params(&sql).unwrap();
+
+                debug!(target: "query_internal", "Created table using: {}", sql);
 
                 warn!(target: "migration", "Created table {} as it has not been found in current database.", table);
             }

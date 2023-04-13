@@ -3,7 +3,10 @@ use crate::IntoSqlite;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SqliteType {
     Integer,
-    Text
+    Real,
+    Text,
+    Blob,
+    DateTime,
 }
 
 impl IntoSqlite for i32 {
@@ -12,9 +15,62 @@ impl IntoSqlite for i32 {
     }
 }
 
+impl IntoSqlite for i64 {
+    fn into_sqlite(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl IntoSqlite for f32 {
+    fn into_sqlite(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl IntoSqlite for f64 {
+    fn into_sqlite(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl IntoSqlite for bool {
+    fn into_sqlite(&self) -> String {
+        match self {
+            true => "1".to_string(),
+            false => "0".to_string()
+        }
+    }
+}
+
 impl IntoSqlite for &str {
     fn into_sqlite(&self) -> String {
         format!("'{}'", self)
+    }
+}
+
+impl IntoSqlite for chrono::NaiveDateTime {
+    fn into_sqlite(&self) -> String {
+        let date_str = self.format("%F %T").to_string();
+        format!("'{}'", date_str)
+    }
+}
+
+pub struct NowTime;
+impl IntoSqlite for NowTime {
+    fn into_sqlite(&self) -> String {
+        "CURRENT_TIMESTAMP".to_string()
+    }
+}
+
+pub struct ConstDateTime(pub &'static str);
+impl IntoSqlite for ConstDateTime {
+    fn into_sqlite(&self) -> String {
+        format!("'{}'", self.0)
+    }
+}
+impl ConstDateTime {
+    pub fn new(s: &'static str) -> ConstDateTime {
+        ConstDateTime(s)
     }
 }
 
@@ -28,7 +84,10 @@ impl IntoSqlite for SqliteType {
     fn into_sqlite(&self) -> String {
         match self {
             SqliteType::Integer => "INTEGER".to_string(),
-            SqliteType::Text => "TEXT".to_string()
+            SqliteType::Text => "TEXT".to_string(),
+            SqliteType::Real => "REAL".to_string(),
+            SqliteType::Blob => "BLOB".to_string(),
+            SqliteType::DateTime => "DATETIME".to_string()
         }
     }
 }

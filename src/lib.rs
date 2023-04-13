@@ -13,9 +13,12 @@ pub mod prelude {
     pub use sequelite_macro::Model;
 
     pub use rusqlite::Error as SqliteError;
+
+    pub use crate::sql_types::{NowTime, ConstDateTime};
 }
 
-extern crate rusqlite;
+pub extern crate rusqlite;
+pub extern crate chrono;
 
 pub trait IntoSqlite {
     fn into_sqlite(&self) -> String;
