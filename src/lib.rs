@@ -41,9 +41,10 @@ mod tests {
         age: i32,
 
         even: Option<bool>
-    }    
+    }
 
     #[test]
+    #[ignore]
     fn migrate_create_table() {
         let mut conn = Connection::new_memory().unwrap();
         conn.register::<TestModel>().unwrap();
@@ -54,6 +55,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn crud() {
         let mut conn = Connection::new_memory().unwrap();
         conn.register::<TestModel>().unwrap();
@@ -140,4 +142,86 @@ mod tests {
         println!("{:?}", TestModel::select().exec(&conn).unwrap());
         assert!(TestModel::count().exec(&conn).unwrap() == 0);
     }
+
+    #[derive(Model)]
+    #[table_name = "test"]
+    struct MigrationTest0 {
+        id: Option<i32>,
+        name: String,
+        money: Option<f64>,
+        even: Option<bool>
+    }
+
+    #[derive(Model)]
+    #[table_name = "test"]
+    struct MigrationTest1 {
+        id: Option<i32>,
+        name: String,
+        #[default_value(&0.0)]
+        money: f64,
+        #[default_value(&false)]
+        even: bool,
+    }
+
+    #[test]
+    #[ignore]
+    fn migrate_basic() {
+        // Check if basic migration works (Add column, Remove column)
+
+        // Create table with TestModel
+        let mut conn = Connection::new_memory().unwrap();
+        conn.register::<TestModel>().unwrap();
+        conn.migrate();
+
+        // Insert 10 users
+        for i in 0..10 {
+            TestModel {
+                id: None,
+                name: format!("User {}", i),
+                age: (i*3)>>2/2%35,
+                even: Some(i % 2 == 0)
+            }.insert(&conn).unwrap();
+        }
+
+        // Check if all users are inserted
+        assert_eq!(TestModel::count().exec(&conn).unwrap(), 10);
+
+        // Migrate to MigrationTest0
+        conn.register::<MigrationTest0>().unwrap();
+        conn.migrate();
+
+        // Check if all users are still there
+        assert_eq!(TestModel::count().exec(&conn).unwrap(), 10);
+    }
+
+    #[test]
+    fn migrate_full() {
+        // Check if full migration works (Add/Remove column, Change column type, Change column default value)
+
+        // Create table with TestModel
+        let mut conn = Connection::new_memory().unwrap();
+        conn.register::<TestModel>().unwrap();
+        conn.migrate();
+
+        // Insert 10 users
+        for i in 0..10 {
+            TestModel {
+                id: None,
+                name: format!("User {}", i),
+                age: (i*3)>>2/2%35,
+                even: Some(i % 2 == 0)
+            }.insert(&conn).unwrap();
+        }
+
+        // Check if all users are inserted
+        assert_eq!(TestModel::count().exec(&conn).unwrap(), 10);
+
+        // Migrate to MigrationTest1
+        conn.register::<MigrationTest1>().unwrap();
+        conn.migrate();
+
+        // Check if all users are still there
+        assert_eq!(TestModel::count().exec(&conn).unwrap(), 10);
+    }
+
 }

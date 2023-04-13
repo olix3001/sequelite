@@ -26,32 +26,9 @@ impl Migrator {
 
         for table in tables.iter() {
             if let Some(_) = latest_schema.tables.get(&table.clone()) {
-                // TODO: Check also type flags and default values.
                 // The table is in the latest schema, compare the columns.
                 let columns = connection.get_all_columns(&table).unwrap();
-                for latest_column in latest_schema.tables.get(&table.clone()).unwrap().iter() {
-                    // Change existing columns.
-                    if let Some(column) = columns.iter().find(|c| c.name() == latest_column.name()) {
-                        // The column is in the latest schema, compare the types.
-                        if column.ty != latest_column.ty {
-                            // The column type is not the same, use alter table to change it.
-                            // safety note: this is safe because the column name is checked against the latest schema.
-                            replace_table_full(connection, table, latest_schema.tables.get(&table.clone()).unwrap());
-
-                            warn!(target: "migration", "Changed column {} in table {} from '{}' to '{}'.", column.name(), table, column.ty.into_sqlite(), latest_column.ty.into_sqlite());
-                        }
-                    } else {
-                        // The column is not in the latest schema, add it without modifying the data.
-                        // safety note: this is safe because the column name is checked against the latest schema.
-                        connection.execute_no_params(&format!(
-                            "ALTER TABLE {} ADD COLUMN {};",
-                            table, latest_column.into_sqlite()
-                        )).unwrap();
-
-                        warn!(target: "migration", "Added column {} to table {} without migrating data.", latest_column.name(), table);
-                    }
-                }
-
+                
                 // Remove columns that are not in the latest schema.
                 for column in columns.iter() {
                     if latest_schema.tables.get(&table.clone()).unwrap().iter().find(|c| c.name() == column.name()).is_none() {
@@ -65,6 +42,36 @@ impl Migrator {
                         warn!(target: "migration", "Dropped column {} from table {}.", column.name(), table);
                     }
                 }
+
+                for latest_column in latest_schema.tables.get(&table.clone()).unwrap().iter() {
+                    // Change existing columns.
+                    if columns.iter().find(|c| c.name() == latest_column.name()).is_none() {
+                        // The column is not in the latest schema, add it without modifying the data.
+                        // safety note: this is safe because the column name is checked against the latest schema.
+                        connection.execute_no_params(&format!(
+                            "ALTER TABLE {} ADD COLUMN {};",
+                            table, latest_column.into_sqlite()
+                        )).unwrap();
+
+                        warn!(target: "migration", "Added column {} to table {} without migrating data.", latest_column.name(), table);
+                    }
+                }
+                let columns = connection.get_all_columns(&table).unwrap();
+
+                for latest_column in latest_schema.tables.get(&table.clone()).unwrap().iter() {
+                    let column = columns.iter().find(|c| c.name() == latest_column.name()).unwrap();
+
+                    // The column is in the latest schema, compare the types.
+                    if column.ty != latest_column.ty || column.flags() != latest_column.flags() || column.same_default(latest_column) {
+                        // The column type is not the same, use alter table to change it.
+                        // safety note: this is safe because the column name is checked against the latest schema.
+                        replace_table_full(connection, table, latest_schema.tables.get(&table.clone()).unwrap());
+
+                        warn!(target: "migration", "Migrated whole table while altering column {} in table {} from '{}' to '{}'.", column.name(), table, column.ty.into_sqlite(), latest_column.ty.into_sqlite());
+                        break; // The table has been replaced, no need to continue.
+                    }
+                }
+
             } else {
                 // The table is not in the latest schema, drop it.
                 connection.execute_no_params(&format!("DROP TABLE IF EXISTS {}", table)).unwrap();

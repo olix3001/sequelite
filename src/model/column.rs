@@ -110,6 +110,14 @@ impl<'a> Column<'a> {
         self.default.is_some()
     }
 
+    pub fn same_default(&self, other: &Self) -> bool {
+        match (&self.default, &other.default) {
+            (Some(DefaultValue::Owned(a)), Some(DefaultValue::Owned(b))) => a.into_sqlite() == b.into_sqlite(),
+            (Some(DefaultValue::Ref(a)), Some(DefaultValue::Ref(b))) => a.into_sqlite() == b.into_sqlite(),
+            _ => false
+        }
+    }
+
     pub fn can_insert_null(&self) -> bool {
         !self.has_flag(SqliteFlag::NotNull) || self.has_flag(SqliteFlag::PrimaryKey) || self.has_default()
     }
