@@ -62,18 +62,6 @@ impl IntoSqlite for NowTime {
     }
 }
 
-pub struct ConstDateTime(pub &'static str);
-impl IntoSqlite for ConstDateTime {
-    fn into_sqlite(&self) -> String {
-        format!("'{}'", self.0)
-    }
-}
-impl ConstDateTime {
-    pub fn new(s: &'static str) -> ConstDateTime {
-        ConstDateTime(s)
-    }
-}
-
 impl IntoSqlite for String {
     fn into_sqlite(&self) -> String {
         format!("'{}'", self)

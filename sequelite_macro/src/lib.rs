@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use quote::quote;
 
-#[proc_macro_derive(Model, attributes(default, table_name))]
+#[proc_macro_derive(Model, attributes(default_value, table_name))]
 pub fn model_derive(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
 
@@ -111,15 +111,55 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                 if segments.len() == 1 {
                     let segment = &segments[0];
                     let ident = &segment.ident;
-                    match ident.to_string().as_str() {
-                        "String" => quote!(sequelite::sql_types::SqliteType::Text),
-                        "i32" => quote!(sequelite::sql_types::SqliteType::Integer),
-                        "i64" => quote!(sequelite::sql_types::SqliteType::Integer),
-                        "f32" => quote!(sequelite::sql_types::SqliteType::Real),
-                        "f64" => quote!(sequelite::sql_types::SqliteType::Real),
-                        "bool" => quote!(sequelite::sql_types::SqliteType::Integer),
-                        "Vec<u8>" => quote!(sequelite::sql_types::SqliteType::Blob),
-                        _ => panic!("Unsupported type"),
+                    // Check Vec<u8>
+                    if ident.to_string() == "Vec" {
+                        // Get inner type
+                        let inner_type = &segment.arguments;
+
+                        match inner_type {
+                            syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments { args, .. }) => {
+                                if args.len() == 1 {
+                                    let arg = &args[0];
+                                    match arg {
+                                        syn::GenericArgument::Type(ty) => {
+                                            let ty = match ty {
+                                                syn::Type::Path(syn::TypePath { path, .. }) => {
+                                                    let segments = &path.segments;
+                                                    if segments.len() == 1 {
+                                                        let segment = &segments[0];
+                                                        let ident = &segment.ident;
+                                                        ident.to_string()
+                                                    } else {
+                                                        panic!("Only one type is supported");
+                                                    }
+                                                }
+                                                _ => panic!("Only types are supported"),
+                                            };
+                                            if ty == "u8" {
+                                                quote!(sequelite::sql_types::SqliteType::Blob)
+                                            } else {
+                                                panic!("Unsupported type: {:?}", segments);
+                                            }
+                                        }
+                                        _ => panic!("Only types are supported"),
+                                    }
+                                } else {
+                                    panic!("Only one type is supported");
+                                }
+                            }
+                            _ => panic!("Only types are supported"),
+                        }
+                    } else {
+                        // Other types
+                        match ident.to_string().as_str() {
+                            "String" => quote!(sequelite::sql_types::SqliteType::Text),
+                            "i32" => quote!(sequelite::sql_types::SqliteType::Integer),
+                            "i64" => quote!(sequelite::sql_types::SqliteType::Integer),
+                            "f32" => quote!(sequelite::sql_types::SqliteType::Real),
+                            "f64" => quote!(sequelite::sql_types::SqliteType::Real),
+                            "bool" => quote!(sequelite::sql_types::SqliteType::Integer),
+                            _ => panic!("Unsupported type: {:?}", segments),
+                        }
                     }
                 } else {
                     if segments.len() == 2 {
@@ -129,10 +169,10 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                         if ident.to_string() == "NaiveDateTime" {
                             quote!(sequelite::sql_types::SqliteType::DateTime)
                         } else {
-                            panic!("Type not supported");
+                            panic!("Type {} not supported", ident.to_string());
                         }
                     } else {
-                        panic!("Type not supported");
+                        panic!("Type {:?} not supported", segments);
                     }
                 }
             }
@@ -142,11 +182,11 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
         // If field has #[default(...)] attribute, set default value
         let mut default_value = quote!(None);
         for attr in &field.attrs {
-            if attr.path.get_ident().unwrap().to_string() == "default" {
+            if attr.path.get_ident().unwrap().to_string() == "default_value" {
                 let group = attr.tokens.clone().into_iter().next().unwrap();
                 let group = match group {
                     proc_macro2::TokenTree::Group(group) => group,
-                    _ => panic!("Invalid default value"),
+                    _ => panic!("Invalid default_value attribute"),
                 };
 
                 let group = group.stream();

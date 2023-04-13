@@ -14,7 +14,7 @@ pub mod prelude {
 
     pub use rusqlite::Error as SqliteError;
 
-    pub use crate::sql_types::{NowTime, ConstDateTime};
+    pub use crate::sql_types::NowTime;
 }
 
 pub extern crate rusqlite;

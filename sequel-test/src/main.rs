@@ -1,12 +1,13 @@
 use sequelite::prelude::*;
 use sequelite::chrono;
 
-#[derive(Debug, Model)]
+#[derive(Debug, Model, Default)]
 struct User {
     id: Option<i32>,
     name: String,
-    #[default(&ConstDateTime("2020-01-01 00:00:00"))]
-    time: Option<chrono::NaiveDateTime>,
+
+    #[default_value(&NowTime)]
+    created_at: Option<chrono::NaiveDateTime>,
 }
 
 fn main() {
@@ -22,7 +23,7 @@ fn main() {
         User {
             id: None,
             name: format!("User {}", i),
-            time: None,
+            created_at: None,
         }.insert(&conn).unwrap();
     }
 
