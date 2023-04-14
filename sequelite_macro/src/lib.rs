@@ -1,6 +1,7 @@
 use proc_macro::TokenStream;
 use quote::quote;
 
+/// A macro for deriving the [Model](sequelite::model::Model) trait.
 #[proc_macro_derive(Model, attributes(default_value, table_name))]
 pub fn model_derive(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
@@ -18,6 +19,11 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
 
     let mut column_value_getters = Vec::new();
     let mut column_value_setters = Vec::new();
+
+    let mut id_column = quote!();
+    let mut id_column_const = quote!();
+
+    let fields_num = fields.len();
 
     // Generate const for each field
     let field_consts = fields.iter().enumerate().map(|(i, field)| {
@@ -39,6 +45,9 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                 flags.push(quote!(sequelite::sql_types::SqliteFlag::PrimaryKey));
                 flags.push(quote!(sequelite::sql_types::SqliteFlag::AutoIncrement));
                 flags.push(quote!(sequelite::sql_types::SqliteFlag::NotNull));
+
+                id_column = quote!(self.#ident);
+                id_column_const = quote!(Self::#ident);
             } else if !field_option {
                 flags.push(quote!(sequelite::sql_types::SqliteFlag::NotNull));
             }
@@ -95,14 +104,16 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
         // Generate setter for column value
         let setter = if field_option {
             quote!(
-                #field_name: row.get(#i).ok(),
+                #field_name: row.get(#i + offset).ok(),
             )
         } else {
             quote!(
-                #field_name: row.get(#i).unwrap(),
+                #field_name: row.get(#i + offset).unwrap(),
             )
         };
         column_value_setters.push(setter);
+
+        let mut relation = quote!(None);
 
         // Get sqlitetype from field type
         let field_type = match field_type {
@@ -149,6 +160,51 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                             }
                             _ => panic!("Only types are supported"),
                         }
+                    } else if ident.to_string() == "Relation" {
+                        // Get inner type and save identifier
+                        let inner_type = &segment.arguments;
+
+                        let relation_type = match inner_type {
+                            syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments { args, .. }) => {
+                                if args.len() == 1 {
+                                    let arg = &args[0];
+                                    match arg {
+                                        syn::GenericArgument::Type(ty) => {
+                                            let ty = match ty {
+                                                syn::Type::Path(syn::TypePath { path, .. }) => {
+                                                    let segments = &path.segments;
+                                                    if segments.len() == 1 {
+                                                        let segment = &segments[0];
+                                                        let ident = &segment.ident;
+                                                        ident
+                                                    } else {
+                                                        panic!("Only one type is supported");
+                                                    }
+                                                }
+                                                _ => panic!("Only types are supported"),
+                                            };
+                                            ty
+                                        }
+                                        _ => panic!("Only types are supported"),
+                                    }
+                                } else {
+                                    panic!("Only one type is supported");
+                                }
+                            }
+                            _ => panic!("Only types are supported"),
+                        };
+
+                        // Set relation
+                        relation = quote!(Some(sequelite::model::relation::ColumnRelation::new(#relation_type::TABLE_NAME_CONST, Self::TABLE_NAME_CONST, "id", &#relation_type::ID_COLUMN_CONST, stringify!(#field_name))));
+
+                        // And setter
+                        column_value_setters[i] = quote!(
+                            #field_name: Relation::<#relation_type>::parse_from_row(&row, offset, #i, &mut offset_counter, joins.contains(&stringify!(#field_name).to_string())),
+                        );
+
+
+                        // Get relation type
+                        quote!(sequelite::sql_types::SqliteType::Integer)                        
                     } else {
                         // Other types
                         match ident.to_string().as_str() {
@@ -194,10 +250,9 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
             }
         }
 
-
         quote!(
             pub const #field_name: sequelite::model::Column<'static> = 
-                sequelite::model::Column::new_const(stringify!(#field_name), #field_type, &[#(#flags),*], #default_value);
+                sequelite::model::Column::new_const(stringify!(#field_name), Self::TABLE_NAME_CONST, #field_type, &[#(#flags),*], #default_value, #relation);
         )
     });
 
@@ -215,6 +270,10 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
             pub const COLUMNS_SLICE: &'static [sequelite::model::Column<'static>] = &[
                 #(#name::#field_names),*
             ];
+
+            pub const TABLE_NAME_CONST: &'static str = #table_name;
+            pub const ID_COLUMN_CONST: &'static sequelite::model::Column<'static> = &#id_column_const;
+            pub const FIELDS_NUM_CONST: usize = #fields_num;
         }
 
         impl sequelite::model::Model for #name {
@@ -226,6 +285,18 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                 #name::COLUMNS_SLICE
             }
 
+            fn count_columns() -> usize {
+                Self::FIELDS_NUM_CONST
+            }
+
+            fn get_id(&self) -> i64 {
+                #id_column.unwrap() as i64
+            }
+
+            fn id_column() -> sequelite::model::Column<'static> {
+                #id_column_const
+            }
+
             fn column_value(&self, column: &'static sequelite::model::Column<'static>) -> Option<Box<dyn sequelite::model::SqliteToSql>> {
                 // Todo: Make this more efficient than if ladder
                 #(#column_value_getters)*
@@ -234,12 +305,21 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                 panic!("Unknown column: {}", column.name_const());
             }
 
-            fn parse_rows(mut rows: sequelite::model::SqliteRows) -> Vec<Self> {
+            fn parse_row(row: &sequelite::model::SqliteRow, offset: usize, joins: &Vec<String>) -> Self {
+                let mut offset_counter = Self::FIELDS_NUM_CONST;
+                Self {
+                    #(#column_value_setters)*
+                }
+            }
+
+            fn parse_rows(mut rows: sequelite::model::SqliteRows, offset: usize, joins: &Vec<String>) -> Vec<Self> {
                 let mut temp = Vec::new();
+                let mut row_counter = 0;
+
                 while let Some(row) = rows.next().unwrap() {
-                    temp.push(Self {
-                        #(#column_value_setters)*
-                    });
+                    temp.push(Self::parse_row(&row, offset, joins));
+
+                    row_counter += 1;
                 }
                 temp
             }

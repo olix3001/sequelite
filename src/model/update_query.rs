@@ -4,6 +4,7 @@ use crate::{connection::{RawQuery, Queryable, Executable}, IntoSqlite};
 
 use super::{Model, Column, query::{ModelQueryFilter, ColumnQueryOrder}};
 
+/// Query that updates rows in a table.
 pub struct ModelUpdateQuery<T: Model> {
     pub query: RawQuery,
     pub columns: Vec<Column<'static>>,
@@ -33,6 +34,21 @@ impl<T: Model> ModelUpdateQuery<T> {
     }
 
     // Filters
+    /// Filter the rows updated by the query.
+    /// 
+    /// ## Arguments
+    /// * `filter` - The filter to apply to the query.
+    /// 
+    /// ## Returns
+    /// A new query with the filter applied.
+    /// 
+    /// ## Example
+    /// ```rs
+    /// User::update()
+    ///     .set(User::name, "New name!")
+    ///     .filter(User::id.eq(1))
+    ///     .exec(&conn).unwrap();
+    /// ```
     pub fn filter(self, mut filter: impl ModelQueryFilter) -> Self {
         let mut filter_query = filter.get_query();
         filter_query.sql = format!("WHERE {}", filter_query.sql);
@@ -41,24 +57,86 @@ impl<T: Model> ModelUpdateQuery<T> {
 
     // Limit and offset
     /// Limit the number of rows returned by the query.
-    /// WARNING: This requires SQLITE_ENABLE_UPDATE_DELETE_LIMIT to be enabled in the sqlite3 library.
+    /// 
+    /// **WARNING:** This requires SQLITE_ENABLE_UPDATE_DELETE_LIMIT to be enabled in the sqlite3 library.
+    /// 
+    /// ## Arguments
+    /// * `limit` - The maximum number of rows to return.
+    /// 
+    /// ## Returns
+    /// A new query with the limit applied.
+    /// 
+    /// ## Example
+    /// ```rs
+    /// User::update()
+    ///     .set(User::name, "New name!")
+    ///     .limit(1)
+    ///     .exec(&conn).unwrap();
+    /// ```
     pub fn limit(self, limit: u32) -> Self {
         self.combine(RawQuery::new("LIMIT ?".to_string(), vec![Box::new(limit)]))
     }
 
     /// Offset the number of rows returned by the query.
+    ///
+    /// **WARNING:** This requires SQLITE_ENABLE_UPDATE_DELETE_LIMIT to be enabled in the sqlite3 library.
+    /// 
+    /// ## Arguments
+    /// * `offset` - The number of rows to skip.
+    /// 
+    /// ## Returns
+    /// A new query with the offset applied.
+    /// 
+    /// ## Example
+    /// ```rs
+    /// User::update()
+    ///     .set(User::name, "New name!")
+    ///     .offset(1)
+    ///     .exec(&conn).unwrap();
+    /// ```
     pub fn offset(self, offset: u32) -> Self {
         self.combine(RawQuery::new("OFFSET ?".to_string(), vec![Box::new(offset)]))
     }
 
     // Order
     /// Order the rows returned by the query.
-    /// WARNING: This requires SQLITE_ENABLE_UPDATE_DELETE_LIMIT to be enabled in the sqlite3 library.
+    ///
+    /// **WARNING:** This requires SQLITE_ENABLE_UPDATE_DELETE_LIMIT to be enabled in the sqlite3 library.
+    /// 
+    /// ## Arguments
+    /// * `order` - The order to apply to the query.
+    /// 
+    /// ## Returns
+    /// A new query with the order applied.
+    /// 
+    /// ## Example
+    /// ```rs
+    /// User::update()
+    ///     .set(User::name, "New name!")
+    ///     .limit(1)
+    ///     .order_by(User::id.desc())
+    ///     .exec(&conn).unwrap();
+    /// ```
     pub fn order_by(self, order: ColumnQueryOrder) -> Self {
         self.combine(RawQuery::new(format!("ORDER BY {}", order.into_sqlite()), Vec::new()))
     }
 
     // Update value for a column
+    /// Set the value of a column in the rows updated by the query.
+    /// 
+    /// ## Arguments
+    /// * `column` - The column to set the value of
+    /// * `value` - The value to set the column to
+    /// 
+    /// ## Returns
+    /// A new query with the value set.
+    /// 
+    /// ## Example
+    /// ```rs
+    /// User::update()
+    ///     .set(User::name, "New name!")
+    ///     .exec(&conn).unwrap();
+    /// ```
     pub fn set<V: ToSql + 'static>(self, column: Column<'static>, value: V) -> Self {
         let mut columns = self.columns;
         let mut values = self.values;

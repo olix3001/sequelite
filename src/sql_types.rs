@@ -1,6 +1,9 @@
 use crate::IntoSqlite;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// The type of a column in a SQLite database.
+/// 
+/// This is used to determine the type of a column when creating a table.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SqliteType {
     Integer,
     Real,
@@ -93,6 +96,9 @@ impl SqliteType {
     }
 }
 
+/// A flag for a column in a SQLite database.
+/// 
+/// This is used to determine the flags of a column when creating a table.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SqliteFlag {
     PrimaryKey,

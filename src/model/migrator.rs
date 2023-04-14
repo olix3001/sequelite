@@ -6,6 +6,9 @@ use crate::{connection::Connection, IntoSqlite};
 use super::{Model, column::Column};
 
 /// Migrator ensures that the database is up to date with the latest schema.
+/// 
+/// This is done by comparing the latest schema with the current schema and updating the database as needed.
+/// There is no rollback support yet, so if the migration fails, the database will be in an inconsistent state.
 pub struct Migrator;
 
 impl Migrator {
@@ -62,7 +65,8 @@ impl Migrator {
                     let column = columns.iter().find(|c| c.name() == latest_column.name()).unwrap();
 
                     // The column is in the latest schema, compare the types.
-                    if column.ty != latest_column.ty || column.flags() != latest_column.flags() || column.same_default(latest_column) {
+                    // TODO: Default value
+                    if column.ty != latest_column.ty || !column.same_flags(latest_column) {
                         // The column type is not the same, use alter table to change it.
                         // safety note: this is safe because the column name is checked against the latest schema.
                         replace_table_full(connection, table, latest_schema.tables.get(&table.clone()).unwrap());

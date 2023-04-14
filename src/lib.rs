@@ -2,9 +2,11 @@ pub mod model;
 pub mod sql_types;
 pub mod connection;
 
+/// A prelude for users of the library.
 pub mod prelude {
     pub use crate::model::{Model, Column, ModelExt, SqliteRows, SqliteToSql,
-        query::{ColumnQueryFilterImpl}
+        query::{ColumnQueryFilterImpl, ModelQueryFilterExt},
+        relation::Relation
     };
 
     pub use crate::connection::Connection;
@@ -20,9 +22,16 @@ pub mod prelude {
 pub extern crate rusqlite;
 pub extern crate chrono;
 
+/// A trait for converting a value to a SQLite value.
+/// 
+/// This is useful for making custom types that can be used as default value for columns.
+/// 
+/// ## Note
+/// If you want to use a custom type as a column type, you need to implement the rusqlite's `ToSql` trait.
 pub trait IntoSqlite {
     fn into_sqlite(&self) -> String;
 }
+
 pub trait IntoSqliteTy {
     fn into_sqlite() -> String;
 }
@@ -118,7 +127,7 @@ mod tests {
                 TestModel::id.in_(
                     TestModel::select()
                         .columns(&[TestModel::id])
-                        .order_by(TestModel::age.descending())
+                        .order_by(TestModel::age.desc())
                         .limit(1)
                 )
             )

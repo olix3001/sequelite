@@ -1,14 +1,18 @@
+use sequelite::model::relation::Relation;
 use sequelite::prelude::*;
-use sequelite::chrono;
 
 #[derive(Debug, Model, Default)]
 struct User {
     id: Option<i32>,
     name: String,
-    nickname: Option<String>,
+}
 
-    #[default_value(&NowTime)]
-    created_at: Option<chrono::NaiveDateTime>,
+#[derive(Debug, Model, Default)]
+struct Post {
+    id: Option<i32>,
+    title: String,
+    body: String,
+    author: Relation<User>,
 }
 
 fn main() {
@@ -17,31 +21,34 @@ fn main() {
 
     // Migrate the database if needed
     conn.register::<User>().unwrap();
+    conn.register::<Post>().unwrap();
     conn.migrate();
 
-    // Create 10 users
-    for i in 0..10 {
-        User {
+    // Create a new user
+    let user_id = User {
+        id: None,
+        name: "John Doe".to_string(),
+    }.insert(&conn).unwrap();
+
+    // Create a new post
+    conn.insert(&[
+        Post {
             id: None,
-            name: format!("User {}", i),
-            nickname: if i % 2 == 0 { Some(format!("Cool nickname {}", i)) } else { None },
-            created_at: None,
-            ..Default::default()
-        }.insert(&conn).unwrap();
-    }
+            title: "Hello world!".to_string(),
+            body: "This is my first post!".to_string(),
+            author: Relation::id(user_id)
+        },
+        Post {
+            id: None,
+            title: "Hello sequelite!".to_string(),
+            body: "This is my second post!".to_string(),
+            author: Relation::id(user_id)
+        },
+    ]).unwrap();
 
-    // Update all users with id >= 5 to have the name "John Doe"
-    User::update()
-        .filter(User::id.ge(5))
-        .set(User::name, "John Doe")
-        .exec(&conn).unwrap();
+    // Get posts by user
+    let posts_query = Post::select()
+        .filter(Post::author.ref_::<User>(user_id));
 
-    // Delete all users without a nickname
-    User::delete()
-        .filter(User::nickname.is_null())
-        .exec(&conn).unwrap();
-
-    // Select all users
-    let users = User::select().exec(&conn).unwrap();
-    users.iter().for_each(|user| println!("{:?}", user));
+    println!("{:?}", posts_query.exec(&conn));
 }

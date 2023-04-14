@@ -6,11 +6,26 @@ use crate::{connection::{Queryable, RawQuery, IntoInsertable, Insertable, Execut
 
 use super::{Model, column::Column};
 
+/// Just a marker type for count queries
 pub struct CountQuery;
 
+/// A trait for filtering queries
+/// 
+/// This allows you to filter, limit, offset, and order elements that you are querying.
+/// 
+/// # Example
+/// ```rs
+/// User::select()
+///     .filter(User::id.eq(1) & User::name.like("%test%"))
+///     .limit(1)
+///     .order(User::id.desc())
+///     .exec(&conn).unwrap();
+/// ```
 pub struct ModelQuery<M> {
     model: PhantomData<M>,
+    table_name: String,
     query: String,
+    joins: Vec<String>,
     params: Vec<Box<dyn ToSql>>,
 }
 
@@ -22,6 +37,18 @@ impl<M: Model> Debug for ModelQuery<M> {
     }
 }
 
+impl<M> Default for ModelQuery<M> {
+    fn default() -> Self {
+        Self {
+            model: Default::default(),
+            table_name: "unknown".to_string(),
+            query: String::new(),
+            joins: Vec::new(),
+            params: Vec::new(),
+        }
+    }
+}
+
 // Only tables can be queried
 impl<M: Model> ModelQuery<M> {
     // ====< Constructors >====
@@ -29,8 +56,9 @@ impl<M: Model> ModelQuery<M> {
         let query = format!("SELECT * FROM {}", M::table_name());
         ModelQuery {
             model: PhantomData,
+            table_name: M::table_name().to_string(),
             query,
-            params: Vec::new(),
+            ..Default::default()
         }
     }
 
@@ -38,8 +66,9 @@ impl<M: Model> ModelQuery<M> {
         let query = format!("SELECT COUNT(*) FROM {}", M::table_name());
         ModelQuery {
             model: PhantomData,
+            table_name: M::table_name().to_string(),
             query,
-            params: Vec::new(),
+            ..Default::default()
         }
     }
 }
@@ -53,37 +82,147 @@ impl<M> ModelQuery<M> {
         params_old.extend(params);
         ModelQuery {
             model: PhantomData,
+            table_name: self.table_name,
             query: format!("{} {}", self.query, query),
+            joins: self.joins,
             params: params_old,
         }
     }
 
     // ====< Additional Methods >====
+    /// Filter the query with the given filter
+    /// 
+    /// ## Arguments
+    /// * `filter` - The filter to apply to the query
+    /// 
+    /// ## Example
+    /// ```rs
+    /// let user = User::select()
+    ///     .filter(User::id.eq(1) & User::name.like("%test%"))
+    ///     .exec(&conn).unwrap();
+    /// ```
     pub fn filter(self, mut filter: impl ModelQueryFilter) -> Self {
         let filter_query = filter.get_query();
         ModelQuery::combine(self, format!("WHERE {}", filter_query.sql), filter_query.params)
     }
 
+    /// Select element by id
+    /// 
+    /// ## Arguments
+    /// * `id` - The id of the element to select
+    /// 
+    /// ## Example
+    /// ```rs
+    /// let user = User::select()
+    ///     .with_id(1)
+    ///     .exec(&conn).unwrap();
+    /// ```
+    /// 
+    /// ## Note
+    /// This is equivalent to `.filter(User::id.eq(id)).limit(1)` and should not be combined with other filters or limits.
+    pub fn with_id(self, id: i64) -> Self {
+        let table_name = self.table_name.clone();
+        ModelQuery::combine(self, format!("WHERE {}.id = ? LIMIT 1", table_name), vec![Box::new(id)])
+    }
+
+    /// Limit the number of elements returned
+    /// 
+    /// ## Arguments
+    /// * `limit` - The maximum number of elements to return
+    /// 
+    /// ## Example
+    /// ```rs
+    /// let users = User::select()
+    ///     .limit(10)
+    ///     .exec(&conn).unwrap();
+    /// ```
     pub fn limit(self, limit: u32) -> Self {
         ModelQuery::combine(self, "LIMIT ?".to_string(), vec![Box::new(limit)])
     }
 
+    /// Offset selection by the given number of elements
+    /// 
+    /// ## Arguments
+    /// * `offset` - The number of elements to skip
+    /// 
+    /// ## Example
+    /// ```rs
+    /// let users = User::select()
+    ///     .offset(10)
+    ///     .exec(&conn).unwrap();
+    /// ```
     pub fn offset(self, offset: u32) -> Self {
         ModelQuery::combine(self, "OFFSET ?".to_string(), vec![Box::new(offset)])
     }
 
+    /// Order the elements by the given order
+    /// 
+    /// ## Arguments
+    /// * `order` - The order to apply to the elements
+    /// 
+    /// ## Example
+    /// ```rs
+    /// let users = User::select()
+    ///     .order(User::id.desc())
+    ///     .exec(&conn).unwrap();
+    /// ```
     pub fn order_by(self, order: ColumnQueryOrder) -> Self {
         ModelQuery::combine(self, format!("ORDER BY {}", order.into_sqlite()), Vec::new())
     }
 
+    /// WARNING: This is highly experimental and may not work as expected
+    /// Use Relation::get() or Relation::take() instead
+    /// 
+    /// ## Arguments
+    /// * `relation` - The relation to join
+    /// 
+    /// ## Example
+    /// ```rs
+    /// let users = Post::select()
+    ///     .join_relation(Post::author)
+    ///     .exec(&conn).unwrap();
+    /// ```
+    pub fn join_relation(mut self, relation: Column<'static>) -> Self {
+        // Ensure that the relation is a relation
+        match relation.get_relation() {
+            Some(relation) => {
+                // Left join the relation table
+                let query = format!("{} LEFT JOIN {} ON {}.{} = {}.{}", self.query, relation.table, relation.table, relation.foreign_key_column.name_const(), relation.local_table, relation.local_key_column_name );
+
+                self.joins.push(relation.local_key_column_name.to_string());
+                // Add the relation to the joins
+                ModelQuery {
+                    model: PhantomData,
+                    table_name: self.table_name,
+                    query,
+                    joins: self.joins,
+                    params: self.params,
+                }
+            },
+            None => panic!("Cannot join a non-relation column"),
+        }
+    }
+
     /// Select only the given columns (do not use this if you want to map to a model column which is not an Option<T>)
+    /// 
+    /// ## Arguments
+    /// * `columns` - The columns to select
+    /// 
+    /// ## Example
+    /// ```rs
+    /// let users = User::select()
+    ///     .columns(&[User::id, User::name])
+    ///     .exec(&conn).unwrap();
+    /// ```
     pub fn columns(self, columns: &[Column<'static>]) -> Self {
         let columns = columns.iter().map(|c| c.name()).collect::<Vec<_>>().join(", ");
         // Replace first SELECT * with the given columns
         let query = self.query.replacen("*", &columns, 1);
         ModelQuery {
             model: PhantomData,
+            table_name: self.table_name,
             query,
+            joins: self.joins,
             params: self.params,
         }
     }
@@ -95,7 +234,7 @@ impl<M: Model> Queryable<Vec<M>> for ModelQuery<M> {
     }
 
     fn parse_result(&mut self, rows: rusqlite::Rows) -> Vec<M> {
-        M::parse_rows(rows)
+        M::parse_rows(rows, 0, &self.joins)
     }
 }
 
@@ -168,14 +307,19 @@ macro_rules! trait_column_filter {
 }
 
 macro_rules! impl_column_filter {
-    ($fn:ident, $op:literal) => {
+    ($fn:ident, $op:literal, $doc:expr) => {
+        #[doc = $doc]
         fn $fn<V: ToSql + 'static>(self, value: V) -> ColumnQueryFilter {
             ColumnQueryFilter {
-                column: self.name(),
+                column: format!("{}.{}", self.table_name, self.name()),
                 op: $op,
                 value: Some(Box::new(value)),
             }
         }
+    };
+
+    ($fn:ident, $op:literal) => {
+        impl_column_filter!($fn, $op, "There is no documentation for this filter");
     };
 }
 
@@ -221,61 +365,200 @@ pub trait ColumnQueryFilterImpl {
     fn in_(self, values: impl ColumnInQuery) -> InQueryFilter;
     fn not_in(self, values: impl ColumnInQuery) -> InQueryFilter;
 
-    fn ascending(self) -> ColumnQueryOrder;
-    fn descending(self) -> ColumnQueryOrder;
+    fn asc(self) -> ColumnQueryOrder;
+    fn desc(self) -> ColumnQueryOrder;
 }
 
 impl ColumnQueryFilterImpl for Column<'_> {
-    impl_column_filter!(eq, "=");
-    impl_column_filter!(ne, "!=");
-    impl_column_filter!(gt, ">");
-    impl_column_filter!(lt, "<");
-    impl_column_filter!(ge, ">=");
-    impl_column_filter!(le, "<=");
+    impl_column_filter!(eq, "=", "
+        Checks if the column is equal to the given value.
+        ## Example
+        ```rust
+        User::select().filter(User::name.eq(\"John\")).exec(conn);
+        ```
+        This will generate the following SQL query:
+        ```sql
+        -- ? is a parameter
+        SELECT * FROM users WHERE users.name = ?;
+        ```
+    ");
+    impl_column_filter!(ne, "!=", "
+        Checks if the column is not equal to the given value.
+        ## Example
+        ```rust
+        User::select().filter(User::name.ne(\"John\")).exec(conn);
+        ```
+        This will generate the following SQL query:
+        ```sql
+        -- ? is a parameter
+        SELECT * FROM users WHERE users.name != ?;
+        ```
+    ");
+    impl_column_filter!(gt, ">", "
+        Checks if the column is greater than the given value.
+        ## Example
+        ```rust
+        User::select().filter(User::age.gt(18)).exec(conn);
+        ```
+        This will generate the following SQL query:
+        ```sql
+        -- ? is a parameter
+        SELECT * FROM users WHERE users.age > ?;
+        ```
+    ");
+    impl_column_filter!(lt, "<", "
+        Checks if the column is less than the given value.
+        ## Example
+        ```rust
+        User::select().filter(User::age.lt(18)).exec(conn);
+        ```
+        This will generate the following SQL query:
+        ```sql
+        -- ? is a parameter
+        SELECT * FROM users WHERE users.age < ?;
+        ```
+    ");
+    impl_column_filter!(ge, ">=", "
+        Checks if the column is greater than or equal to the given value.
+        ## Example
+        ```rust
+        User::select().filter(User::age.ge(18)).exec(conn);
+        ```
+        This will generate the following SQL query:
+        ```sql
+        -- ? is a parameter
+        SELECT * FROM users WHERE users.age >= ?;
+        ```
+    ");
+    impl_column_filter!(le, "<=", "
+        Checks if the column is less than or equal to the given value.
+        ## Example
+        ```rust
+        User::select().filter(User::age.le(18)).exec(conn);
+        ```
+        This will generate the following SQL query:
+        ```sql
+        -- ? is a parameter
+        SELECT * FROM users WHERE users.age <= ?;
+        ```
+    ");
 
-    impl_column_filter!(like, "LIKE");
-    impl_column_filter!(not_like, "NOT LIKE");
+    impl_column_filter!(like, "LIKE", "
+        Checks if the column is like the given value.
+        ## Example
+        ```rust
+        User::select().filter(User::name.like(\"%John%\")).exec(conn);
+        ```
+        This will generate the following SQL query:
+        ```sql
+        -- ? is a parameter
+        SELECT * FROM users WHERE users.name LIKE ?;
+        ```
+    ");
+    impl_column_filter!(not_like, "NOT LIKE", "
+        Checks if the column is not like the given value.
+        ## Example
+        ```rust
+        User::select().filter(User::name.not_like(\"%John%\")).exec(conn);
+        ```
+        This will generate the following SQL query:
+        ```sql
+        SELECT * FROM users WHERE users.name NOT LIKE ?;
+        ```
+    ");
 
     /// Check if the column is null (only for nullable columns)
+    /// ## Example
+    /// ```rust
+    /// User::select().filter(User::name.is_null()).exec(conn);
+    /// ```
+    /// This will generate the following SQL query:
+    /// ```sql
+    /// SELECT * FROM users WHERE users.name IS NULL;
+    /// ```
     fn is_null(self) -> ColumnQueryFilterUnary {
         ColumnQueryFilterUnary {
-            column: self.name(),
+            column: format!("{}.{}", self.table_name, self.name()),
             op: "IS NULL",
         }
     }
 
     /// Check if the column is not null (only for nullable columns)
+    /// ## Example
+    /// ```rust
+    /// User::select().filter(User::name.is_not_null()).exec(conn);
+    /// ```
+    /// This will generate the following SQL query:
+    /// ```sql
+    /// SELECT * FROM users WHERE users.name IS NOT NULL;
+    /// ```
     fn is_not_null(self) -> ColumnQueryFilterUnary {
         ColumnQueryFilterUnary {
-            column: self.name(),
+            column: format!("{}.{}", self.table_name, self.name()),
             op: "IS NOT NULL",
         }
     }
 
     /// Check if the column is in the list of values
+    /// ## Example
+    /// ```rust
+    /// User::select().filter(User::name.in_(vec!["John", "Jane"])).exec(conn);
+    /// ```
+    /// This will generate the following SQL query:
+    /// ```sql
+    /// -- ? is a parameter
+    /// SELECT * FROM users WHERE users.name IN (?, ?);
+    /// ```
     fn in_(self, values: impl ColumnInQuery) -> InQueryFilter {
         let q = values.to_query();
-        let sql = format!("{} IN {}", self.name(), q.sql);
+        let sql = format!("{}.{} IN {}", self.table_name, self.name(), q.sql);
 
         InQueryFilter { sql: RawQuery::new(sql, q.params) }
     }
 
     /// Check if the column is not in the list of values
+    /// ## Example
+    /// ```rust
+    /// User::select().filter(User::name.not_in(vec!["John", "Jane"])).exec(conn);
+    /// ```
+    /// This will generate the following SQL query:
+    /// ```sql
+    /// -- ? is a parameter
+    /// SELECT * FROM users WHERE users.name NOT IN (?, ?);
+    /// ```
     fn not_in(self, values: impl ColumnInQuery) -> InQueryFilter {
         let q = values.to_query();
-        let sql = format!("{} NOT IN {}", self.name(), q.sql);
+        let sql = format!("{}.{} NOT IN {}", self.table_name, self.name(), q.sql);
 
         InQueryFilter { sql: RawQuery::new(sql, q.params) }
     }
 
-    fn ascending(self) -> ColumnQueryOrder {
+    /// Order the query by the column in ascending order
+    /// ## Example
+    /// ```rust
+    /// User::select().order_by(User::name.asc()).exec(conn);
+    /// ```
+    /// This will generate the following SQL query:
+    /// ```sql
+    /// SELECT * FROM users ORDER BY users.name ASC;
+    /// ```
+    fn asc(self) -> ColumnQueryOrder {
         ColumnQueryOrder {
             column: self.name(),
             order: ColumnQueryOrdering::Ascending,
         }
     }
 
-    fn descending(self) -> ColumnQueryOrder {
+    /// Order the query by the column in descending order
+    /// ## Example
+    /// ```rust
+    /// User::select().order_by(User::name.desc()).exec(conn);
+    /// ```
+    /// This will generate the following SQL query:
+    /// ```sql
+    /// SELECT * FROM users ORDER BY users.name DESC;
+    /// ```
+    fn desc(self) -> ColumnQueryOrder {
         ColumnQueryOrder {
             column: self.name(),
             order: ColumnQueryOrdering::Descending,
@@ -366,6 +649,21 @@ pub trait ModelQueryFilterExt: ModelQueryFilter {
 }
 
 impl<F: ModelQueryFilter> ModelQueryFilterExt for F {
+    /// Combine two filters with an AND operator
+    /// ## Example
+    /// ```rust
+    /// User::select().filter(User::name.eq("John").and(User::age.gt(18))).exec(conn);
+    /// ```
+    /// This will generate the following SQL query:
+    /// ```sql
+    /// SELECT * FROM users WHERE users.name = ? AND users.age > ?;
+    /// ```
+    /// 
+    /// ## Note
+    /// This is not a beautiful way to write this query, so you should use '&' instead:
+    /// ```rust
+    /// User::select().filter(User::name.eq("John") & User::age.gt(18)).exec(conn);
+    /// ```
     fn and<F1: ModelQueryFilter>(self, filter: F1) -> ModelQueryFilterAnd<Self, F1>
     where
         Self: Sized,
@@ -376,6 +674,21 @@ impl<F: ModelQueryFilter> ModelQueryFilterExt for F {
         }
     }
 
+    /// Combine two filters with an OR operator
+    /// ## Example
+    /// ```rust
+    /// User::select().filter(User::name.eq("John").or(User::age.gt(18))).exec(conn);
+    /// ```
+    /// This will generate the following SQL query:
+    /// ```sql
+    /// SELECT * FROM users WHERE users.name = ? OR users.age > ?;
+    /// ```
+    /// 
+    /// ## Note
+    /// This is not a beautiful way to write this query, so you should use '|' instead:
+    /// ```rust
+    /// User::select().filter(User::name.eq("John") | User::age.gt(18)).exec(conn);
+    /// ```
     fn or<F1: ModelQueryFilter>(self, filter: F1) -> ModelQueryFilterOr<Self, F1>
     where
         Self: Sized,
@@ -418,10 +731,11 @@ impl<F0: ModelQueryFilter, F1: ModelQueryFilter> ModelQueryFilter for ModelQuery
 }
 
 macro_rules! impl_op {
-    ($op:ident ($fn:ident), $target:ident => $result:ident) => {
+    ($op:ident ($fn:ident), $target:ident => $result:ident, $doc:expr) => {
         impl<T: ModelQueryFilter> $op<T> for $target {
             type Output = $result<Self, T>;
 
+            #[doc = $doc]
             fn $fn(self, rhs: T) -> Self::Output {
                 $result {
                     filter0: self,
@@ -432,11 +746,14 @@ macro_rules! impl_op {
     };
 }
 
-impl_op!(BitAnd (bitand), ColumnQueryFilter => ModelQueryFilterAnd);
-impl_op!(BitOr (bitor), ColumnQueryFilter => ModelQueryFilterOr);
+impl_op!(BitAnd (bitand), ColumnQueryFilter => ModelQueryFilterAnd, "Alternative to [ModelQueryFilterExt::and]");
+impl_op!(BitOr (bitor), ColumnQueryFilter => ModelQueryFilterOr, "Alternative to [ModelQueryFilterExt::or]");
 
-impl_op!(BitAnd (bitand), ColumnQueryFilterUnary => ModelQueryFilterAnd);
-impl_op!(BitOr (bitor), ColumnQueryFilterUnary => ModelQueryFilterOr);
+impl_op!(BitAnd (bitand), InQueryFilter => ModelQueryFilterAnd, "Alternative to [ModelQueryFilterExt::and]");
+impl_op!(BitOr (bitor), InQueryFilter => ModelQueryFilterOr, "Alternative to [ModelQueryFilterExt::or]");
+
+impl_op!(BitAnd (bitand), ColumnQueryFilterUnary => ModelQueryFilterAnd, "Alternative to [ModelQueryFilterExt::and]");
+impl_op!(BitOr (bitor), ColumnQueryFilterUnary => ModelQueryFilterOr, "Alternative to [ModelQueryFilterExt::or]");
 
 
 pub struct ModelInsertQuery<M: Model> {
