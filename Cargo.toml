@@ -12,6 +12,7 @@ edition = "2021"
 exclude = [
     "sequel-test",
     "target",
+    ".vscode",
 ]
 license = "MIT"
 description = "A simple SQLite ORM for Rust"
