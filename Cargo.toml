@@ -7,14 +7,25 @@ members = [
 
 [package]
 name = "sequelite"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["chrono"]
+chrono = ["rusqlite/chrono"]
+bundled = ["rusqlite/bundled"]
 
 [dependencies]
-rusqlite = { version = "0.28", features = ["bundled", "chrono"] }
+rusqlite = { version = "0.28" }
 env_logger = "0.9"
 log = "0.4"
 sequelite_macro = { path = "./sequelite_macro" }
 chrono = "0.4"
+
+[profile.release]
+opt-level = 3
+lto = true
+debug = false
+debug-assertions = false
+codegen-units = 1
+embed-bitcode = true

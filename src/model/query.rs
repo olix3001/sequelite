@@ -170,7 +170,7 @@ impl<M> ModelQuery<M> {
         ModelQuery::combine(self, format!("ORDER BY {}", order.into_sqlite()), Vec::new())
     }
 
-    /// WARNING: This is highly experimental and may not work as expected
+    /// **WARNING:** This is highly experimental and may not work as expected
     /// Use Relation::get() or Relation::take() instead
     /// 
     /// ## Arguments

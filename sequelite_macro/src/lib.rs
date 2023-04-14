@@ -2,6 +2,21 @@ use proc_macro::TokenStream;
 use quote::quote;
 
 /// A macro for deriving the [Model](sequelite::model::Model) trait.
+/// 
+/// ## Attributes
+/// * #\[table_name = "name"] - Custom table name. If not specified, the table name will be the lowercase of the struct name + 's'.
+/// * #\[default_value(value)] - Default value for the column. If not specified, the default value will be NULL.
+/// 
+/// ## Example
+/// ```rust
+/// use sequelite::prelude::*;
+/// 
+/// #[derive(Model)]
+/// struct User {
+///     id: Option<i32>, // field named "id" will be primary key
+///     name: String,
+/// }
+/// ```
 #[proc_macro_derive(Model, attributes(default_value, table_name))]
 pub fn model_derive(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
