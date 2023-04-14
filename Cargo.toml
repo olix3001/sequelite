@@ -9,6 +9,17 @@ members = [
 name = "sequelite"
 version = "0.2.0"
 edition = "2021"
+exclude = [
+    "sequel-test",
+    "target",
+]
+license = "MIT"
+license-file = "LICENSE"
+description = "A simple SQLite ORM for Rust"
+repository = "https://github.com/olix3001/sequelite"
+keywords = ["sqlite", "orm", "sqlite3", "sqlite-orm", "rusqlite"]
+categories = ["database", "api-bindings"]
+readme = "README.md"
 
 [features]
 default = ["chrono"]
