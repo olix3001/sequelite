@@ -2,6 +2,10 @@
 name = "sequelite_macro"
 version = "0.2.0"
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/olix3001/sequelite/sequelite_macro"
+description = "Sequelite macros for generating SQL models"
+authors = ["Oliwier Michalik"]
 
 [lib]
 proc-macro = true
