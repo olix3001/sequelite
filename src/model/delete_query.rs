@@ -10,6 +10,12 @@ pub struct ModelDeleteQuery<M: Model> {
     model: PhantomData<M>,
 }
 
+impl<M: Model> Default for ModelDeleteQuery<M> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<M: Model> ModelDeleteQuery<M> {
     pub fn new() -> Self {
         ModelDeleteQuery {
@@ -103,7 +109,7 @@ impl<M: Model> Queryable<()> for ModelDeleteQuery<M> {
         self.query.move_clone()
     }
 
-    fn parse_result(&mut self, _rows: rusqlite::Rows) -> () {
+    fn parse_result(&mut self, _rows: rusqlite::Rows) {
         // Nothing to parse
     }
 

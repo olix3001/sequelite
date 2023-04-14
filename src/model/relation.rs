@@ -27,27 +27,25 @@ use super::{Model, query::ModelQuery, Column};
 ///     author: Relation<User>
 /// }
 /// 
-/// fn main() {
-///     let mut conn = Connection::new_memory().unwrap();
-///     conn.register::<User>().unwrap();
-///     conn.register::<Post>().unwrap();
-///     conn.migrate();
+/// let mut conn = Connection::new_memory().unwrap();
+/// conn.register::<User>().unwrap();
+/// conn.register::<Post>().unwrap();
+/// conn.migrate();
 /// 
-///     let user_id = User {
-///         id: None,
-///         name: "John Doe".to_string(),
-///     }.insert(&conn).unwrap();
+/// let user_id = User {
+///     id: None,
+///     name: "John Doe".to_string(),
+/// }.insert(&conn).unwrap();
 /// 
-///    let post_id = Post {
-///        id: None,
-///        title: "Hello world!".to_string(),
-///        body: "This is my first post!".to_string(),
-///        author: Relation::id(user_id)
-///    }.insert(&conn).unwrap();
+/// let post_id = Post {
+///     id: None,
+///     title: "Hello world!".to_string(),
+///     body: "This is my first post!".to_string(),
+///     author: Relation::id(user_id)
+/// }.insert(&conn).unwrap();
 /// 
-///    let post = Post::select().filter(Post::author.ref_::<User>(user_id)).exec(&conn).unwrap().pop().unwrap();
-///    assert_eq!(post_id, post.author.get_id());
-/// }
+/// let post = Post::select().filter(Post::author.ref_::<User>(user_id)).exec(&conn).unwrap().pop().unwrap();
+/// assert_eq!(post_id, post.author.get_id());
 /// ```
 pub struct Relation<M> where M: Model {
     related_key: Option<i64>,
@@ -58,7 +56,7 @@ pub struct Relation<M> where M: Model {
 
 impl<M: Model> ToSql for Relation<M> {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-        Ok(rusqlite::types::ToSqlOutput::Owned(rusqlite::types::Value::Integer(self.related_key.unwrap_or(0) as i64)))
+        Ok(rusqlite::types::ToSqlOutput::Owned(rusqlite::types::Value::Integer(self.related_key.unwrap_or(0))))
     }
 }
 
@@ -76,7 +74,7 @@ impl<M: Model> Clone for Relation<M> {
 impl<M: Model> FromSql for Relation<M> {
     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
         Ok(Relation {
-            related_key: value.as_i64().map(|v| v as i64).ok(),
+            related_key: value.as_i64().ok(),
             related: None,
 
             marker: Default::default()
@@ -227,8 +225,8 @@ pub struct ColumnRelation<'a> {
 impl<'a> ColumnRelation<'a> {
     pub const fn new(table: &'a str, local_table: &'a str, column: &'a str, ref_col: &'static Column<'static>, local_col: &'a str) -> Self {
         ColumnRelation {
-            table: table,
-            column: column,
+            table,
+            column,
             local_table,
             foreign_key_column: ref_col,
             local_key_column_name: local_col,

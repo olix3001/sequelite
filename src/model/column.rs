@@ -53,7 +53,7 @@ impl Clone for Column<'_> {
             flags: self.flags,
             flags_vec: self.flags_vec.clone(),
 
-            relation: self.relation.clone(),
+            relation: self.relation,
 
             default: None,
         }

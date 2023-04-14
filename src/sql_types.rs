@@ -84,6 +84,7 @@ impl IntoSqlite for SqliteType {
 }
 
 impl SqliteType {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<SqliteType> {
         match s.to_uppercase().as_str() {
             "INTEGER" => Some(SqliteType::Integer),

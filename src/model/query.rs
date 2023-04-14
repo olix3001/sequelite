@@ -203,7 +203,7 @@ impl<M> ModelQuery<M> {
         }
     }
 
-    /// Select only the given columns (do not use this if you want to map to a model column which is not an Option<T>)
+    /// Select only the given columns (do not use this if you want to map to a model column which is not an `Option<T>`)
     /// 
     /// ## Arguments
     /// * `columns` - The columns to select
@@ -217,7 +217,7 @@ impl<M> ModelQuery<M> {
     pub fn columns(self, columns: &[Column<'static>]) -> Self {
         let columns = columns.iter().map(|c| c.name()).collect::<Vec<_>>().join(", ");
         // Replace first SELECT * with the given columns
-        let query = self.query.replacen("*", &columns, 1);
+        let query = self.query.replacen('*', &columns, 1);
         ModelQuery {
             model: PhantomData,
             table_name: self.table_name,

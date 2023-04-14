@@ -17,7 +17,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-sequelite = "0.1.0"
+sequelite = "0.2"
 ```
 
 You can find the documentation [here](https://docs.rs/sequelite)

@@ -28,13 +28,13 @@ impl Migrator {
         let tables = connection.get_all_tables().unwrap();
 
         for table in tables.iter() {
-            if let Some(_) = latest_schema.tables.get(&table.clone()) {
+            if latest_schema.tables.get(&table.clone()).is_some() {
                 // The table is in the latest schema, compare the columns.
-                let columns = connection.get_all_columns(&table).unwrap();
+                let columns = connection.get_all_columns(table).unwrap();
                 
                 // Remove columns that are not in the latest schema.
                 for column in columns.iter() {
-                    if latest_schema.tables.get(&table.clone()).unwrap().iter().find(|c| c.name() == column.name()).is_none() {
+                    if !latest_schema.tables.get(&table.clone()).unwrap().iter().any(|c| c.name() == column.name()) {
                         // The column is not in the latest schema, drop it.
                         // safety note: this is safe because the column name is checked against the latest schema.
                         connection.execute_no_params(&format!(
@@ -48,7 +48,7 @@ impl Migrator {
 
                 for latest_column in latest_schema.tables.get(&table.clone()).unwrap().iter() {
                     // Change existing columns.
-                    if columns.iter().find(|c| c.name() == latest_column.name()).is_none() {
+                    if !columns.iter().any(|c| c.name() == latest_column.name()) {
                         // The column is not in the latest schema, add it without modifying the data.
                         // safety note: this is safe because the column name is checked against the latest schema.
                         connection.execute_no_params(&format!(
@@ -59,7 +59,7 @@ impl Migrator {
                         warn!(target: "migration", "Added column {} to table {} without migrating data.", latest_column.name(), table);
                     }
                 }
-                let columns = connection.get_all_columns(&table).unwrap();
+                let columns = connection.get_all_columns(table).unwrap();
 
                 for latest_column in latest_schema.tables.get(&table.clone()).unwrap().iter() {
                     let column = columns.iter().find(|c| c.name() == latest_column.name()).unwrap();
@@ -86,7 +86,7 @@ impl Migrator {
 
         // Create any tables that are in the latest schema but not in the database.
         for (table, columns) in latest_schema.tables.iter() {
-            if !tables.contains(&table) {
+            if !tables.contains(table) {
                 // The table is not in the database, create it.
                 let mut sql = format!("CREATE TABLE {} (", table);
                 for column in columns.iter() {
@@ -129,6 +129,7 @@ fn replace_table_full(connection: &Connection, table: &str, columns: &[Column]) 
     )).unwrap();
 }
 
+#[derive(Default)]
 pub struct DbSchema<'a> {
     // Name -> Fields
     pub tables: HashMap<String, &'a [Column<'a>]>

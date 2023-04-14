@@ -1,3 +1,58 @@
+#![allow(clippy::wrong_self_convention)]
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::ptr_arg)]
+
+//! A library for creating SQLite models.
+//! 
+//! ## Example
+//! ```rs
+//! use sequelite::prelude::*;
+//! 
+//! #[derive(Model)]
+//! struct User {
+//!     id: Option<i32>,
+//!     name: String,
+//! }
+//! 
+//! #[derive(Model)]
+//! struct Post {
+//!     id: Option<i32>,
+//!     title: String,
+//!     body: String,
+//!     author: Relation<User>
+//! }
+//! 
+//! let mut conn = Connection::new_memory().unwrap();
+//! conn.register::<User>().unwrap();
+//! conn.register::<Post>().unwrap();
+//! conn.migrate();
+//! 
+//! let user_id = User {
+//!     id: None,
+//!     name: "John Doe".to_string(),
+//! }.insert(&conn).unwrap();
+//! 
+//! conn.insert(&[
+//!     Post {
+//!         id: None,
+//!         title: "Hello world!".to_string(),
+//!         body: "This is my first post!".to_string(),
+//!         author: Relation::id(user_id)
+//!     },
+//!     Post {
+//!         id: None,
+//!         title: "Hello sequelite!".to_string(),
+//!         body: "This is my second post!".to_string(),
+//!         author: Relation::id(user_id)
+//!     }
+//! ]).unwrap();
+//! 
+//! let posts_query = Post::select()
+//!     .filter(Post::author.ref_::<User>(user_id));
+//! 
+//! println!("{:?}", posts_query.exec(&conn).unwrap());
+//! ```
+
 pub mod model;
 pub mod sql_types;
 pub mod connection;

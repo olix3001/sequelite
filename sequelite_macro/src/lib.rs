@@ -1,7 +1,9 @@
+#![allow(clippy::uninlined_format_args)]
+
 use proc_macro::TokenStream;
 use quote::quote;
 
-/// A macro for deriving the [Model](sequelite::model::Model) trait.
+/// A macro for deriving the `Model` trait.
 /// 
 /// ## Attributes
 /// * #\[table_name = "name"] - Custom table name. If not specified, the table name will be the lowercase of the struct name + 's'.
@@ -56,7 +58,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
 
         // If field name is ID, add PRIMARY KEY, AUTOINCREMENT and NOT NULL flags
         if let Some(ident) = field_name {
-            if ident.to_string() == "id" {
+            if ident == "id" {
                 flags.push(quote!(sequelite::sql_types::SqliteFlag::PrimaryKey));
                 flags.push(quote!(sequelite::sql_types::SqliteFlag::AutoIncrement));
                 flags.push(quote!(sequelite::sql_types::SqliteFlag::NotNull));
@@ -138,7 +140,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                     let segment = &segments[0];
                     let ident = &segment.ident;
                     // Check Vec<u8>
-                    if ident.to_string() == "Vec" {
+                    if ident == "Vec" {
                         // Get inner type
                         let inner_type = &segment.arguments;
 
@@ -175,7 +177,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                             }
                             _ => panic!("Only types are supported"),
                         }
-                    } else if ident.to_string() == "Relation" {
+                    } else if ident == "Relation" {
                         // Get inner type and save identifier
                         let inner_type = &segment.arguments;
 
@@ -190,8 +192,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                                                     let segments = &path.segments;
                                                     if segments.len() == 1 {
                                                         let segment = &segments[0];
-                                                        let ident = &segment.ident;
-                                                        ident
+                                                        &segment.ident
                                                     } else {
                                                         panic!("Only one type is supported");
                                                     }
@@ -232,19 +233,17 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                             _ => panic!("Unsupported type: {:?}", segments),
                         }
                     }
-                } else {
-                    if segments.len() == 2 {
-                        // Expect that 3rd segment is NaiveDateTime
-                        let segment = &segments[1];
-                        let ident = &segment.ident;
-                        if ident.to_string() == "NaiveDateTime" {
-                            quote!(sequelite::sql_types::SqliteType::DateTime)
-                        } else {
-                            panic!("Type {} not supported", ident.to_string());
-                        }
+                } else if segments.len() == 2 {
+                    // Expect that 3rd segment is NaiveDateTime
+                    let segment = &segments[1];
+                    let ident = &segment.ident;
+                    if ident == "NaiveDateTime" {
+                        quote!(sequelite::sql_types::SqliteType::DateTime)
                     } else {
-                        panic!("Type {:?} not supported", segments);
+                        panic!("Type {} not supported", ident);
                     }
+                } else {
+                    panic!("Type {:?} not supported", segments);
                 }
             }
             _ => panic!("Only types are supported"),
@@ -253,7 +252,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
         // If field has #[default(...)] attribute, set default value
         let mut default_value = quote!(None);
         for attr in &field.attrs {
-            if attr.path.get_ident().unwrap().to_string() == "default_value" {
+            if attr.path.get_ident().unwrap() == "default_value" {
                 let group = attr.tokens.clone().into_iter().next().unwrap();
                 let group = match group {
                     proc_macro2::TokenTree::Group(group) => group,
@@ -344,7 +343,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
 
 fn get_table_name(attrs: &[syn::Attribute]) -> Option<String> {
     for attr in attrs {
-        if attr.path.get_ident().unwrap().to_string() == "table_name" {
+        if attr.path.get_ident().unwrap() == "table_name" {
             // Expect = symbol and string literal
             let mut tokens = attr.tokens.clone().into_iter();
 

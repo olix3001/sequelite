@@ -226,7 +226,7 @@ impl Connection {
     /// You can enable `RUST_LOG=debug` to see the migration queries.
     pub fn migrate(&self) {
         info!(target: "migration", "Ensuring database is up to date...");
-        Migrator::migrate(&self.latest_schema, &self)
+        Migrator::migrate(&self.latest_schema, self)
     }
 
     /// Execute a query on the database.
@@ -389,7 +389,7 @@ pub trait IntoInsertable {
     fn into_insertable(&self) -> Self::Insertable;
 }
 
-impl<'a, T, Q0: Queryable<T>> IntoQueryable<T> for Q0 {
+impl<T, Q0: Queryable<T>> IntoQueryable<T> for Q0 {
     type Queryable = Q0;
 
     fn into_queryable(self) -> Self::Queryable {
@@ -413,8 +413,8 @@ impl RawQuery {
     }
 
     pub fn move_clone(&mut self) -> Self {
-        let sql = std::mem::replace(&mut self.sql, String::new());
-        let params = std::mem::replace(&mut self.params, Vec::new());
+        let sql = std::mem::take(&mut self.sql);
+        let params = std::mem::take(&mut self.params);
         RawQuery {
             sql,
             params
@@ -426,7 +426,7 @@ impl RawQuery {
         let mut sql = self.sql.clone();
         for param in &self.params {
             let param = param.to_sql().unwrap();
-            sql = sql.replace("?", &value_to_string(&param));
+            sql = sql.replace('?', &value_to_string(&param));
         }
         sql
     }

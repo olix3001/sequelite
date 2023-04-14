@@ -12,6 +12,12 @@ pub struct ModelUpdateQuery<T: Model> {
     marker: std::marker::PhantomData<T>
 }
 
+impl<T: Model> Default for ModelUpdateQuery<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: Model> ModelUpdateQuery<T> {
     pub fn new() -> Self {
         ModelUpdateQuery {
@@ -172,12 +178,12 @@ impl<M: Model> Queryable<()> for ModelUpdateQuery<M> {
             params.push(value);
         }
 
-        params.extend(self.query.params.drain(..));
+        params.append(&mut self.query.params);
 
         RawQuery::new(format!("{}{}", sql, self.query.sql), params)
     }
 
-    fn parse_result(&mut self, _rows: rusqlite::Rows) -> () {
+    fn parse_result(&mut self, _rows: rusqlite::Rows) {
         // Nothing to parse
     }
 

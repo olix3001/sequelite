@@ -7,7 +7,7 @@ members = [
 
 [package]
 name = "sequelite"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 exclude = [
     "sequel-test",
@@ -21,6 +21,7 @@ keywords = ["sqlite", "orm", "sqlite3", "sqlite-orm", "rusqlite"]
 categories = ["database", "api-bindings"]
 readme = "README.md"
 authors = ["Oliwier Michalik"]
+documentation = "https://docs.rs/sequelite"
 
 [features]
 default = ["chrono"]
@@ -31,8 +32,11 @@ bundled = ["rusqlite/bundled"]
 rusqlite = { version = "0.28" }
 env_logger = "0.9"
 log = "0.4"
-sequelite_macro = { path = "./sequelite_macro", version = "0.2.0" }
+sequelite_macro = { path = "./sequelite_macro", version = "0.2.1" }
 chrono = "0.4"
+
+[lib]
+doctest = false
 
 [profile.release]
 opt-level = 3
