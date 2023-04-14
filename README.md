@@ -25,7 +25,7 @@ You can find the documentation [here](https://docs.rs/sequelite)
 ## Example
 
 ```rust
-use sequelite::{Database, Model, Table};
+use sequelite::prelude::*;
 
 #[derive(Debug, Model)]
 struct User {
